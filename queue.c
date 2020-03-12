@@ -3,11 +3,14 @@
 #include <string.h>
 
 #include "harness.h"
+#include "natsort/strnatcmp.h"
 #include "queue.h"
 
 #ifndef strlcpy
 #define strlcpy(dst, src, sz) snprintf((dst), (sz), "%s", (src))
 #endif
+
+#define compare(val1, val2) strnatcmp(val1, val2) < 0
 
 /*
  * Create empty queue.
@@ -116,15 +119,13 @@ bool q_insert_tail(queue_t *q, char *s)
  */
 bool q_remove_head(queue_t *q, char *sp, size_t bufsize)
 {
-    if (!q || q->size == 0)
+    if (!q || q->size == 0 || !sp)
         return false;
     list_ele_t *tmp = q->head;
     q->head = q->head->next;  // remove head
     q->size--;
-    if (sp) {
-        strncpy(sp, tmp->value, bufsize - 1);
-        sp[bufsize - 1] = '\0';
-    }
+    strncpy(sp, tmp->value, bufsize - 1);
+    sp[bufsize - 1] = '\0';
     tmp->next = NULL;
     free(tmp->value);
     free(tmp);
@@ -169,21 +170,45 @@ void q_reverse(queue_t *q)
  * No effect if q is NULL or empty. In addition, if q has only one
  * element, do nothing.
  */
-void q_sort(queue_t *q)
+static list_ele_t *merge(list_ele_t *list_l, list_ele_t *list_r)
 {
-    if (!q || q->size <= 1)
-        return;
-    /* Merge Sort */
-    q->head = merge_sort(q->head, q->size);
+    list_ele_t *head = NULL;
+    list_ele_t **tmp = &head;
 
-    list_ele_t *tmp = q->head;
-    while (tmp->next) {
-        tmp = tmp->next;
+    while (list_l && list_r) {
+        if (strnatcmp(list_l->value, list_r->value) < 0) {
+            *tmp = list_l;
+            list_l = list_l->next;
+        } else {
+            *tmp = list_r;
+            list_r = list_r->next;
+        }
+        tmp = &((*tmp)->next);
     }
-    q->tail = tmp;
+    if (list_l)
+        *tmp = list_l;
+    if (list_r)
+        *tmp = list_r;
+
+    return head;
 }
 
-list_ele_t *merge_sort(list_ele_t *head, int q_size)
+static void split(list_ele_t *head, list_ele_t **list_l, list_ele_t **list_r)
+{
+    list_ele_t *slow = head;
+    list_ele_t *fast = head->next;
+
+    while (fast && fast->next) {
+        slow = slow->next;
+        fast = fast->next->next;
+    }
+
+    *list_l = slow->next;
+    *list_r = head;
+    slow->next = NULL;  // to actually cut the list
+}
+
+static list_ele_t *merge_sort(list_ele_t *head, int q_size)
 {
     if (!head || !head->next)
         return head;
@@ -199,95 +224,18 @@ list_ele_t *merge_sort(list_ele_t *head, int q_size)
 
     /* Merge the list*/
     return merge(list_l, list_r);
-
-    /* Iterative version */
-    // list_ele_t *tmp_head = NULL;
-    // for (int block_size = 1; block_size < q_size; block_size *= 2) {
-    //     tmp_head = head;
-    //     for (int start = 0; start < q_size - 1; start += 2 * block_size) {
-    //         /* move tmp head to next block*/
-    //         for (int i = 1; i < start && tmp_head->next; ++i) {
-    //             tmp_head = tmp_head->next;
-    //         }
-    //         /*Split the list according to block size*/
-    //         list_ele_t *slow = tmp_head;
-    //         list_ele_t *fast = tmp_head->next;
-    //         for (int i = 0; i < block_size && fast && fast->next; ++i) {
-    //             slow = slow->next;
-    //             fast = fast->next->next;
-    //         }
-
-    //         list_l = slow->next;
-    //         list_r = tmp_head;
-    //         slow->next = NULL;  // to actually cut the list
-
-    //         /* Sort and merge splitted list */
-    //         tmp_head = merge(list_l, list_r);
-    //         if (start == 0) {
-    //             head = tmp_head; // store the head of the first list
-    //         }
-    //     }
-    // }
-
-    return head;
 }
 
-bool smaller_than(list_ele_t *ele_l, list_ele_t *ele_r)
+void q_sort(queue_t *q)
 {
-    return (strcmp(ele_l->value, ele_r->value) < 0) ? true : false;
-}
+    if (!q || q->size <= 1)
+        return;
+    /* Merge Sort */
+    q->head = merge_sort(q->head, q->size);
 
-list_ele_t *merge(list_ele_t *list_l, list_ele_t *list_r)
-{
-    if (!list_l)
-        return list_l;
-    if (!list_r)
-        return list_r;
-
-    list_ele_t *tmp = NULL;
-    list_ele_t *head = NULL;
-
-    /* Compare each element and link together */
-    while (list_l && list_r) {
-        if (smaller_than(list_l, list_r)) {
-            if (tmp) {
-                tmp->next = list_l;
-                tmp = tmp->next;
-            } else {  // first access
-                tmp = list_l;
-                head = tmp;
-            }
-            list_l = list_l->next;
-        } else {
-            if (tmp) {
-                tmp->next = list_r;
-                tmp = tmp->next;
-            } else {  // first access
-                tmp = list_r;
-                head = tmp;
-            }
-            list_r = list_r->next;
-        }
+    list_ele_t *tmp = q->head;
+    while (tmp->next) {
+        tmp = tmp->next;
     }
-    if (list_l)
-        tmp->next = list_l;
-    if (list_r)
-        tmp->next = list_r;
-
-    return head;
-}
-
-void split(list_ele_t *head, list_ele_t **list_l, list_ele_t **list_r)
-{
-    list_ele_t *slow = head;
-    list_ele_t *fast = head->next;
-
-    while (fast && fast->next) {
-        slow = slow->next;
-        fast = fast->next->next;
-    }
-
-    *list_l = slow->next;
-    *list_r = head;
-    slow->next = NULL;  // to actually cut the list
+    q->tail = tmp;
 }

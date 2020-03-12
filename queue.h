@@ -92,9 +92,5 @@ void q_reverse(queue_t *q);
  * element, do nothing.
  */
 void q_sort(queue_t *q);
-list_ele_t *merge_sort(list_ele_t *head, int q_size);
-list_ele_t *merge(list_ele_t *list_l, list_ele_t *list_r);
-bool smaller_than(list_ele_t *ele_l, list_ele_t *ele_r);
-void split(list_ele_t *head, list_ele_t **list_l, list_ele_t **list_r);
 
 #endif /* LAB0_QUEUE_H */
